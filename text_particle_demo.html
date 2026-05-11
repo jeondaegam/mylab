@@ -80,7 +80,7 @@
   function scatter() {
     particles.forEach((p) => {
       p.vx = (Math.random() - 0.5) * 1.5;
-      p.vy = -(Math.random() * 4 + 1.5);
+      p.vy = -(Math.random() * 2 + 1.5); // 위로 튀어오르는 효과 속도 조절
     });
     state = "scattered";
   }
