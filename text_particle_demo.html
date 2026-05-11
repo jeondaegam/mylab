@@ -125,6 +125,7 @@
     startAtText = false,
     useCharTimers = false,
     preserveFading = false,
+    earlyBubbleCharIndexes = [],
   ) {
     const now = performance.now();
     const pts = (
@@ -165,6 +166,29 @@
       appearAt: useCharTimers ? charBirthTimes[pt.charIndex] : -Infinity,
       appearDuration: Math.random() * 180 + 220,
     }));
+
+    earlyBubbleCharIndexes.forEach((charIndex) => {
+      const candidates = nextParticles.filter((p) => p.charIndex === charIndex);
+      const bubbleCount = Math.min(
+        candidates.length,
+        Math.floor(Math.random() * 3) + 1,
+      );
+
+      for (let i = 0; i < bubbleCount; i++) {
+        const selectedIndex = Math.floor(Math.random() * candidates.length);
+        const source = candidates.splice(selectedIndex, 1)[0];
+        nextParticles.push({
+          ...source,
+          x: source.x + (Math.random() - 0.5) * 4,
+          y: source.y + (Math.random() - 0.5) * 4,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -(Math.random() * 2 + 1.5),
+          life: 1,
+          fading: true,
+        });
+      }
+    });
+
     particles = [...fadingParticles, ...nextParticles];
   }
 
@@ -183,20 +207,29 @@
     state = "gathering";
   }
 
-  initParticles(currentText);
+  charBirthTimes = [...currentText].map(() => Infinity);
+  initParticles(
+    currentText,
+    false,
+    true,
+    false,
+    [...currentText].map((_, index) => index),
+  );
   gather();
-  charBirthTimes = [...currentText].map(() => performance.now());
 
   function updateTextFromInput() {
     const nextText = textInput.value.trim() || "mylab";
     const now = performance.now();
     const previousChars = [...currentText];
     const nextChars = [...nextText];
+    const newCharIndexes = [];
     charBirthTimes = nextChars.map((char, index) =>
-      previousChars[index] === char ? charBirthTimes[index] : now,
+      previousChars[index] === char
+        ? charBirthTimes[index]
+        : (newCharIndexes.push(index), now),
     );
     currentText = nextText;
-    initParticles(currentText, true, true, true);
+    initParticles(currentText, true, true, true, newCharIndexes);
     gather();
   }
 
@@ -246,10 +279,12 @@
       }
 
       ctx.save();
-      const appearProgress = Math.min(
-        (performance.now() - p.appearAt) / p.appearDuration,
-        1,
-      );
+      const appearProgress = Number.isFinite(p.appearAt)
+        ? Math.min(
+            Math.max((performance.now() - p.appearAt) / p.appearDuration, 0),
+            1,
+          )
+        : 1;
       const visibleProgress = p.fading ? 1 : appearProgress;
       ctx.globalAlpha = p.life * visibleProgress;
       ctx.beginPath();
