@@ -51,6 +51,10 @@
   let particles = [];
   let state = "gathered";
   let frame = 0;
+  let charBirthTimes = [];
+  // 파티클이 텍스트에 머무는 최소/최대 시간 (ms)
+  const minHoldTime = 1000;
+  const maxHoldTime = 1500;
 
   // 텍스트에 해당하는 픽셀 좌표 추출 함수
   function getTextPixels(text) {
@@ -77,12 +81,65 @@
     return pts;
   }
 
+  // 글자마다 픽셀 좌표 추출 함수
+  function getTextPixelsByChar(text) {
+    const off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    const octx = off.getContext("2d");
+    const fs = (text === "✦" ? 120 : Math.min(W / 4, 110)) * 1.2; // 텍스트 크기 조절
+    octx.font = `900 ${fs}px 'Apple SD Gothic Neo', Arial, sans-serif`;
+    octx.fillStyle = "#fff";
+    octx.textAlign = "left";
+    octx.textBaseline = "middle";
+
+    const chars = [...text];
+    const widths = chars.map((char) => octx.measureText(char).width);
+    const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+    let cursorX = W / 2 - totalWidth / 2;
+    const pts = [];
+    const gap = 5;
+
+    chars.forEach((char, charIndex) => {
+      octx.clearRect(0, 0, W, H);
+      octx.fillText(char, cursorX, H / 2);
+      const data = octx.getImageData(0, 0, W, H).data;
+
+      for (let y = 0; y < H; y += gap) {
+        for (let x = 0; x < W; x += gap) {
+          if (data[(y * W + x) * 4 + 3] > 128) {
+            pts.push({ x, y, charIndex });
+          }
+        }
+      }
+
+      cursorX += widths[charIndex];
+    });
+
+    return pts;
+  }
+
   // 입자 초기화 함수
-  function initParticles(text, startAtText = false) {
-    const pts = getTextPixels(text);
+  function initParticles(
+    text,
+    startAtText = false,
+    useCharTimers = false,
+    preserveFading = false,
+  ) {
+    const now = performance.now();
+    const pts = (
+      useCharTimers ? getTextPixelsByChar(text) : getTextPixels(text)
+    ).filter((pt) => {
+      if (!useCharTimers) return true;
+      return now - charBirthTimes[pt.charIndex] < maxHoldTime;
+    });
     const count = Math.min(pts.length, 600);
     const sampled = pts.sort(() => Math.random() - 0.5).slice(0, count);
-    particles = sampled.map((pt) => ({
+    const fadingParticles = preserveFading
+      ? particles.filter((p) => p.fading)
+      : [];
+    const nextParticles = sampled.map((pt) => ({
+      charIndex: pt.charIndex ?? 0,
       tx: pt.x,
       ty: pt.y,
       x: startAtText ? pt.x + (Math.random() - 0.5) * 6 : Math.random() * W,
@@ -95,10 +152,18 @@
       // 흰색 공기방울 느낌
       color: `hsl(${Math.random() * 20 + 190}, 20%, ${Math.random() * 18 + 78}%)`,
       wave: Math.random() * Math.PI * 2,
+
+      // 파티클 모양이 흔들리는 효과를 위한 jitter 관련 속성
+      jitter: Math.random() * Math.PI * 2,
+      jitterSpeed: Math.random() * 0.04 + 0.02,
+      jitterSize: Math.random() * 0.8 + 0.3,
       life: 1,
       decay: Math.random() * 0.01 + 0.008,
       fading: false,
+      bornAt: useCharTimers ? charBirthTimes[pt.charIndex] : Infinity,
+      holdTime: minHoldTime + Math.random() * (maxHoldTime - minHoldTime),
     }));
+    particles = [...fadingParticles, ...nextParticles];
   }
 
   // 입자 흩어지게 하는 함수
@@ -118,12 +183,19 @@
 
   initParticles(currentText);
   gather();
+  charBirthTimes = [...currentText].map(() => performance.now());
 
   function updateTextFromInput() {
     const nextText = textInput.value.trim() || "mylab";
+    const now = performance.now();
+    const previousChars = [...currentText];
+    const nextChars = [...nextText];
+    charBirthTimes = nextChars.map((char, index) =>
+      previousChars[index] === char ? charBirthTimes[index] : now,
+    );
     currentText = nextText;
-    initParticles(currentText, true);
-    scatter(true);
+    initParticles(currentText, true, true, true);
+    gather();
   }
 
   function loop() {
@@ -134,12 +206,27 @@
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       if (state === "gathering" || state === "gathered") {
-        const dx = p.tx - p.x,
-          dy = p.ty - p.y;
-        p.vx += dx * 0.08;
-        p.vy += dy * 0.08;
-        p.vx *= 0.72;
-        p.vy *= 0.72;
+        if (!p.fading && performance.now() - p.bornAt >= p.holdTime) {
+          p.vx = (Math.random() - 0.5) * 1.5;
+          p.vy = -(Math.random() * 2 + 1.5);
+          p.fading = true;
+        }
+
+        if (p.fading) {
+          p.wave += 0.08;
+          p.vx += Math.sin(p.wave) * 0.06;
+          p.vy -= 0.015;
+          p.vx *= 0.96;
+          p.life -= p.decay;
+        } else {
+          const dx = p.tx - p.x,
+            dy = p.ty - p.y;
+          p.vx += dx * 0.08;
+          p.vy += dy * 0.08;
+          p.vx *= 0.72;
+          p.vy *= 0.72;
+          p.jitter += p.jitterSpeed;
+        }
       } else {
         p.wave += 0.08;
         p.vx += Math.sin(p.wave) * 0.06;
@@ -159,7 +246,11 @@
       ctx.save();
       ctx.globalAlpha = p.life;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      const drawX = p.fading ? p.x : p.x + Math.sin(p.jitter) * p.jitterSize;
+      const drawY = p.fading
+        ? p.y
+        : p.y + Math.cos(p.jitter * 1.2) * p.jitterSize;
+      ctx.arc(drawX, drawY, p.size, 0, Math.PI * 2);
       ctx.fillStyle = p.color;
       // ctx.shadowBlur = 0;
       ctx.fill();
