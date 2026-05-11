@@ -1,120 +1,147 @@
-
-<canvas id="c" style="display:block;width:100%;height:420px;background:#08080f;border-radius:12px;cursor:pointer;"></canvas>
-<p style="text-align:center;font-size:13px;color:var(--color-text-secondary);margin-top:8px;">클릭하면 흩어지고 다시 모여</p>
+<canvas
+  id="c"
+  style="
+    display: block;
+    width: 100%;
+    height: 420px;
+    background: #08080f;
+    border-radius: 12px;
+    cursor: pointer;
+  "
+></canvas>
+<p
+  style="
+    text-align: center;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-top: 8px;
+  "
+>
+  클릭하면 흩어지고 다시 모여
+</p>
 <script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-canvas.width = canvas.offsetWidth;
-canvas.height = 420;
-const W = canvas.width, H = canvas.height;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  canvas.width = canvas.offsetWidth;
+  canvas.height = 420;
+  const W = canvas.width,
+    H = canvas.height;
 
-const texts = ['mylab', '✦', 'mylab'];
-let textIndex = 0;
-let particles = [];
-let state = 'gathered';
-let frame = 0;
+  const texts = ["mylab", "✦", "yeoreum"];
+  let textIndex = 0;
+  let particles = [];
+  let state = "gathered";
+  let frame = 0;
 
-function getTextPixels(text) {
-  const off = document.createElement('canvas');
-  off.width = W; off.height = H;
-  const octx = off.getContext('2d');
-  const fs = text === '✦' ? 120 : Math.min(W / 4, 110);
-  octx.font = `900 ${fs}px 'Apple SD Gothic Neo', Arial, sans-serif`;
-  octx.fillStyle = '#fff';
-  octx.textAlign = 'center';
-  octx.textBaseline = 'middle';
-  octx.fillText(text, W/2, H/2);
-  const data = octx.getImageData(0, 0, W, H).data;
-  const pts = [];
-  const gap = 5;
-  for (let y = 0; y < H; y += gap) {
-    for (let x = 0; x < W; x += gap) {
-      if (data[(y * W + x) * 4 + 3] > 128) {
-        pts.push({ x, y });
+  // 텍스트에 해당하는 픽셀 좌표 추출 함수
+  function getTextPixels(text) {
+    const off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    const octx = off.getContext("2d");
+    const fs = text === "✦" ? 120 : Math.min(W / 4, 110);
+    octx.font = `900 ${fs}px 'Apple SD Gothic Neo', Arial, sans-serif`;
+    octx.fillStyle = "#fff";
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+    octx.fillText(text, W / 2, H / 2);
+    const data = octx.getImageData(0, 0, W, H).data;
+    const pts = [];
+    const gap = 5;
+    for (let y = 0; y < H; y += gap) {
+      for (let x = 0; x < W; x += gap) {
+        if (data[(y * W + x) * 4 + 3] > 128) {
+          pts.push({ x, y });
+        }
       }
     }
+    return pts;
   }
-  return pts;
-}
 
-function initParticles(text) {
-  const pts = getTextPixels(text);
-  const count = Math.min(pts.length, 600);
-  const sampled = pts.sort(() => Math.random() - 0.5).slice(0, count);
-  particles = sampled.map(pt => ({
-    tx: pt.x, ty: pt.y,
-    x: Math.random() * W,
-    y: Math.random() * H,
-    vx: 0, vy: 0,
-    size: Math.random() * 2 + 1,
-    color: `hsl(${Math.random() * 60 + 200}, 90%, 70%)`
-  }));
-}
+  // 입자 초기화 함수
+  function initParticles(text) {
+    const pts = getTextPixels(text);
+    const count = Math.min(pts.length, 600);
+    const sampled = pts.sort(() => Math.random() - 0.5).slice(0, count);
+    particles = sampled.map((pt) => ({
+      tx: pt.x,
+      ty: pt.y,
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: 0,
+      vy: 0,
+      size: Math.random() * 2 + 1,
+      color: `hsl(${Math.random() * 60 + 200}, 90%, 70%)`,
+    }));
+  }
 
-function scatter() {
-  particles.forEach(p => {
-    p.vx = (Math.random() - 0.5) * 18;
-    p.vy = (Math.random() - 0.5) * 18;
-  });
-  state = 'scattered';
-}
+  // 입자 흩어지게 하는 함수
+  function scatter() {
+    particles.forEach((p) => {
+      p.vx = (Math.random() - 0.5) * 18;
+      p.vy = (Math.random() - 0.5) * 18;
+    });
+    state = "scattered";
+  }
 
-function gather() {
-  state = 'gathering';
-}
+  // 입자 모여서 텍스트 만드는 함수
+  function gather() {
+    state = "gathering";
+  }
 
-initParticles(texts[textIndex]);
-gather();
+  initParticles(texts[textIndex]);
+  gather();
 
-function loop() {
-  frame++;
-  ctx.fillStyle = 'rgba(8,8,15,0.2)';
-  ctx.fillRect(0, 0, W, H);
+  function loop() {
+    frame++;
+    ctx.fillStyle = "rgba(8,8,15,0.2)";
+    ctx.fillRect(0, 0, W, H);
 
-  particles.forEach(p => {
-    if (state === 'gathering' || state === 'gathered') {
-      const dx = p.tx - p.x, dy = p.ty - p.y;
-      p.vx += dx * 0.08;
-      p.vy += dy * 0.08;
-      p.vx *= 0.72;
-      p.vy *= 0.72;
-    } else {
-      p.vy += 0.3;
-      p.vx *= 0.98;
+    particles.forEach((p) => {
+      if (state === "gathering" || state === "gathered") {
+        const dx = p.tx - p.x,
+          dy = p.ty - p.y;
+        p.vx += dx * 0.08;
+        p.vy += dy * 0.08;
+        p.vx *= 0.72;
+        p.vy *= 0.72;
+      } else {
+        p.vy += 0.3;
+        p.vx *= 0.98;
+      }
+      p.x += p.vx;
+      p.y += p.vy;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.restore();
+    });
+
+    if (state === "gathering") {
+      const settled = particles.every(
+        (p) => Math.abs(p.tx - p.x) < 2 && Math.abs(p.ty - p.y) < 2,
+      );
+      if (settled) state = "gathered";
     }
-    p.x += p.vx;
-    p.y += p.vy;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.shadowColor = p.color;
-    ctx.shadowBlur = 6;
-    ctx.fill();
-    ctx.restore();
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener("click", () => {
+    if (state === "gathered") {
+      scatter();
+      setTimeout(() => {
+        textIndex = (textIndex + 1) % texts.length;
+        initParticles(texts[textIndex]);
+        gather();
+      }, 800);
+    }
   });
 
-  if (state === 'gathering') {
-    const settled = particles.every(p =>
-      Math.abs(p.tx - p.x) < 2 && Math.abs(p.ty - p.y) < 2
-    );
-    if (settled) state = 'gathered';
-  }
-
-  requestAnimationFrame(loop);
-}
-
-canvas.addEventListener('click', () => {
-  if (state === 'gathered') {
-    scatter();
-    setTimeout(() => {
-      textIndex = (textIndex + 1) % texts.length;
-      initParticles(texts[textIndex]);
-      gather();
-    }, 800);
-  }
-});
-
-loop();
+  loop();
 </script>
