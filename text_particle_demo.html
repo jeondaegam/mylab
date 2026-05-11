@@ -19,16 +19,35 @@
 >
   클릭하면 흩어지고 다시 모여
 </p>
+<div style="text-align: center; margin-top: 10px">
+  <input
+    id="textInput"
+    type="text"
+    value="mylab"
+    placeholder="표시할 텍스트 입력"
+    style="
+      width: min(280px, 80%);
+      padding: 8px 10px;
+      border: 1px solid #3a3a46;
+      border-radius: 8px;
+      background: #11111a;
+      color: #f5f5f5;
+      font-size: 14px;
+      text-align: center;
+      outline: none;
+    "
+  />
+</div>
 <script>
   const canvas = document.getElementById("c");
+  const textInput = document.getElementById("textInput");
   const ctx = canvas.getContext("2d");
   canvas.width = canvas.offsetWidth;
   canvas.height = 420;
   const W = canvas.width,
     H = canvas.height;
 
-  const texts = ["mylab", "✦", "yeoreum"];
-  let textIndex = 0;
+  let currentText = textInput.value;
   let particles = [];
   let state = "gathered";
   let frame = 0;
@@ -59,15 +78,15 @@
   }
 
   // 입자 초기화 함수
-  function initParticles(text) {
+  function initParticles(text, startAtText = false) {
     const pts = getTextPixels(text);
     const count = Math.min(pts.length, 600);
     const sampled = pts.sort(() => Math.random() - 0.5).slice(0, count);
     particles = sampled.map((pt) => ({
       tx: pt.x,
       ty: pt.y,
-      x: Math.random() * W,
-      y: Math.random() * H,
+      x: startAtText ? pt.x + (Math.random() - 0.5) * 6 : Math.random() * W,
+      y: startAtText ? pt.y + (Math.random() - 0.5) * 6 : Math.random() * H,
       vx: 0,
       vy: 0,
       size: Math.random() * 4 + 2,
@@ -76,14 +95,18 @@
       // 흰색 공기방울 느낌
       color: `hsl(${Math.random() * 20 + 190}, 20%, ${Math.random() * 18 + 78}%)`,
       wave: Math.random() * Math.PI * 2,
+      life: 1,
+      decay: Math.random() * 0.01 + 0.008,
+      fading: false,
     }));
   }
 
   // 입자 흩어지게 하는 함수
-  function scatter() {
+  function scatter(fadeOut = false) {
     particles.forEach((p) => {
       p.vx = (Math.random() - 0.5) * 1.5;
       p.vy = -(Math.random() * 2 + 1.5); // 위로 튀어오르는 효과 속도 조절
+      p.fading = fadeOut;
     });
     state = "scattered";
   }
@@ -93,15 +116,23 @@
     state = "gathering";
   }
 
-  initParticles(texts[textIndex]);
+  initParticles(currentText);
   gather();
+
+  function updateTextFromInput() {
+    const nextText = textInput.value.trim() || "mylab";
+    currentText = nextText;
+    initParticles(currentText, true);
+    scatter(true);
+  }
 
   function loop() {
     frame++;
     ctx.fillStyle = "rgba(8,8,15,0.4)"; // 잔상 효과
     ctx.fillRect(0, 0, W, H);
 
-    particles.forEach((p) => {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
       if (state === "gathering" || state === "gathered") {
         const dx = p.tx - p.x,
           dy = p.ty - p.y;
@@ -114,11 +145,19 @@
         p.vx += Math.sin(p.wave) * 0.06;
         p.vy -= 0.015;
         p.vx *= 0.96;
+        if (p.fading) p.life -= p.decay;
       }
       p.x += p.vx;
       p.y += p.vy;
 
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+        if (particles.length === 0) state = "gathered";
+        continue;
+      }
+
       ctx.save();
+      ctx.globalAlpha = p.life;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fillStyle = p.color;
@@ -128,7 +167,7 @@
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
-    });
+    }
 
     if (state === "gathering") {
       const settled = particles.every(
@@ -142,12 +181,15 @@
 
   canvas.addEventListener("click", () => {
     if (state === "gathered") {
-      scatter();
-      setTimeout(() => {
-        textIndex = (textIndex + 1) % texts.length;
-        initParticles(texts[textIndex]);
-        gather();
-      }, 800);
+      scatter(true);
+    }
+  });
+
+  textInput.addEventListener("input", updateTextFromInput);
+  textInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      updateTextFromInput();
+      textInput.blur();
     }
   });
 
